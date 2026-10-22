@@ -55,3 +55,7 @@ Flask listens on `http://localhost:5000`. The contact endpoint is `POST http://l
 The automated tests mock the mail service and SMTP connection; they never send email.
 
 For multiple production workers, replace the in-memory limiter storage with a shared store and configure trusted reverse-proxy client-IP handling before relying on IP-based limits.
+
+## Production deployment
+
+See [deploy/README.md](deploy/README.md) for the isolated port-8001 setup, persistent limits and manual rollout. No deployment is performed automatically.

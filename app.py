@@ -1,4 +1,5 @@
 import re
+import sqlite3
 from typing import Any
 
 from flask import Flask, current_app, jsonify, request
@@ -6,6 +7,9 @@ from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.exceptions import RequestEntityTooLarge
+from werkzeug.middleware.proxy_fix import ProxyFix
+
+from production import LoopbackOnly, allow_request
 
 import mail_service
 from config import Config
@@ -62,6 +66,15 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     if not allowed_origin or allowed_origin == "*":
         raise ValueError("ALLOWED_ORIGIN must contain one explicit frontend origin")
 
+    production = bool(app.config["PRODUCTION"])
+    if production:
+        if app.debug or allowed_origin != "https://weimanndev.com":
+            raise ValueError("Production requires debug off and the canonical HTTPS origin")
+        # Only the directly connected loopback proxy may supply forwarded headers.
+        app.wsgi_app = LoopbackOnly(ProxyFix(
+            app.wsgi_app, x_for=1, x_proto=1, x_host=0, x_port=0, x_prefix=0
+        ))
+
     CORS(
         app,
         resources={
@@ -74,12 +87,17 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         },
     )
 
-    limiter = Limiter(
-        key_func=get_remote_address,
-        app=app,
-        default_limits=[],
-        storage_uri=str(app.config["RATELIMIT_STORAGE_URI"]),
-    )
+    if production:
+        def limit_contact(view):
+            return view
+    else:
+        limiter = Limiter(
+            key_func=get_remote_address,
+            app=app,
+            default_limits=[],
+            storage_uri=str(app.config["RATELIMIT_STORAGE_URI"]),
+        )
+        limit_contact = limiter.limit(str(app.config["CONTACT_RATE_LIMIT"]))
 
     @app.errorhandler(RequestEntityTooLarge)
     def handle_request_too_large(_error: RequestEntityTooLarge):
@@ -92,8 +110,23 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     def _error_response(error_code: str, status_code: int):
         return jsonify({"error": error_code}), status_code
 
+    @app.before_request
+    def production_rate_limit():
+        if production and request.path == "/api/contact" and request.method == "POST":
+            try:
+                allowed = allow_request(
+                    str(app.config["RATE_LIMIT_DB"]), request.remote_addr or "unknown",
+                    int(app.config["PRODUCTION_IP_LIMIT"]),
+                    int(app.config["PRODUCTION_GLOBAL_LIMIT"]),
+                )
+            except (sqlite3.Error, OSError):
+                current_app.logger.error("Persistent rate limiter unavailable")
+                return _error("temporarily_unavailable", 503)
+            if not allowed:
+                return _error("rate_limited", 429)
+
     @app.post("/api/contact")
-    @limiter.limit(str(app.config["CONTACT_RATE_LIMIT"]))
+    @limit_contact
     def contact():
         if not request.is_json:
             return _error("unsupported_media_type", 415)
@@ -130,4 +163,6 @@ app = create_app()
 
 
 if __name__ == "__main__":
+    if app.config["PRODUCTION"]:
+        raise RuntimeError("Use Gunicorn for production")
     app.run(host="127.0.0.1", port=5000, debug=False)

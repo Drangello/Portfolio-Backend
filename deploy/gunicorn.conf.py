@@ -1,0 +1,14 @@
+bind = "127.0.0.1:8001"
+workers = 1
+worker_class = "sync"
+threads = 1
+timeout = 60
+graceful_timeout = 30
+max_requests = 500
+max_requests_jitter = 50
+reload = False
+accesslog = None
+errorlog = "-"
+loglevel = "warning"
+forwarded_allow_ips = "127.0.0.1"
+raw_env = ["PORTFOLIO_ENV=production"]

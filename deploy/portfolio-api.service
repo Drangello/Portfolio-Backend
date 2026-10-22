@@ -1,0 +1,30 @@
+[Unit]
+Description=Portfolio Flask contact API (independent of Coderr)
+After=network.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=portfolio-api
+Group=portfolio-api
+WorkingDirectory=/opt/portfolio-api
+EnvironmentFile=/etc/portfolio-api/portfolio.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/portfolio-api/.venv/bin/gunicorn --config /opt/portfolio-api/deploy/gunicorn.conf.py app:app
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=40
+StateDirectory=portfolio-api
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/portfolio-api
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

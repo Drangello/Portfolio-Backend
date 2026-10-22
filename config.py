@@ -12,6 +12,11 @@ def _get_int(name: str, default: int) -> int:
 
 
 class Config:
+    PRODUCTION = os.getenv("PORTFOLIO_ENV", "development") == "production"
+    RATE_LIMIT_DB = os.getenv("RATE_LIMIT_DB", "/var/lib/portfolio-api/rate-limits.sqlite3")
+    PRODUCTION_IP_LIMIT = 5
+    PRODUCTION_GLOBAL_LIMIT = 30
+
     MAX_CONTENT_LENGTH = 24 * 1024
 
     CONTACT_RECIPIENT_EMAIL = os.getenv(
